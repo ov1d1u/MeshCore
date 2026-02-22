@@ -429,15 +429,11 @@ bool BaseChatMesh::sendGroupMessage(uint32_t timestamp, mesh::GroupChannel& chan
   memcpy(temp, &timestamp, 4);   // mostly an extra blob to help make packet_hash unique
   temp[4] = 0;  // TXT_TYPE_PLAIN
 
-  sprintf((char *) &temp[5], "%s: ", sender_name);  // <sender>: <msg>
-  char *ep = strchr((char *) &temp[5], 0);
-  int prefix_len = ep - (char *) &temp[5];
+  if (text_len > MAX_TEXT_LEN) text_len = MAX_TEXT_LEN;
+  memcpy(&temp[5], text, text_len);
+  temp[5 + text_len] = 0;  // null terminator
 
-  if (text_len + prefix_len > MAX_TEXT_LEN) text_len = MAX_TEXT_LEN - prefix_len;
-  memcpy(ep, text, text_len);
-  ep[text_len] = 0;  // null terminator
-
-  auto pkt = createGroupDatagram(PAYLOAD_TYPE_GRP_TXT, channel, temp, 5 + prefix_len + text_len);
+  auto pkt = createGroupDatagram(PAYLOAD_TYPE_GRP_TXT, channel, temp, 5 + text_len);
   if (pkt) {
     sendFloodScoped(channel, pkt);
     return true;
