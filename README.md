@@ -13,6 +13,7 @@ MeshCore provides the ability to create wireless mesh networks, similar to Mesht
   * Devices can forward messages across multiple nodes, extending range beyond a single radio's reach.
   * Supports up to a configurable number of hops to balance network efficiency and prevent excessive traffic.
   * Nodes use fixed roles where "Companion" nodes are not repeating messages at all to prevent adverse routing paths from being used.
+* Repeater Blacklist – Repeaters can be configured with a list of blacklisted node pubkeys via `blacklist.add`/`blacklist.remove`/`blacklist.list` CLI commands; any packet whose path already includes a blacklisted repeater will not be relayed further, even with variable (1/2/3-byte) path hash sizes.
 * Supports LoRa Radios – Works with Heltec, RAK Wireless, and other LoRa-based hardware.
 * Decentralized & Resilient – No central server or internet required; the network is self-healing.
 * Low Power Consumption – Ideal for battery-powered or solar-powered devices.
@@ -111,6 +112,7 @@ pio test --environment native --verbose
 There are a number of fairly major features in the pipeline, with no particular time-frames attached yet. In very rough chronological order:
 - [X] Companion radio: UI redesign
 - [X] Repeater + Room Server: add ACL's (like Sensor Node has)
+- [X] Repeater: pubkey blacklist to stop relaying packets that have passed through a blacklisted node
 - [X] Standardise Bridge mode for repeaters
 - [ ] Repeater/Bridge: Standardise the Transport Codes for zoning/filtering
 - [X] Core + Repeater: enhanced zero-hop neighbour discovery

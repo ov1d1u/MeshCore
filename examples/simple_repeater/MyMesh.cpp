@@ -410,6 +410,18 @@ bool MyMesh::isLooped(const mesh::Packet* packet, const uint8_t max_counters[]) 
   return n >= max_counters[hash_size];
 }
 
+bool MyMesh::isPathBlacklisted(const mesh::Packet* packet) const {
+  uint8_t hash_size = packet->getPathHashSize();
+  uint8_t hash_count = packet->getPathHashCount();
+  const uint8_t* path = packet->path;
+  while (hash_count > 0) {
+    if (blacklist.containsHash(path, hash_size)) return true;
+    hash_count--;
+    path += hash_size;
+  }
+  return false;
+}
+
 void MyMesh::sendFloodReply(mesh::Packet* packet, unsigned long delay_millis, uint8_t path_hash_size) {
   TransportKey req_scope;
   bool is_wildcard = recv_pkt_region != NULL && recv_pkt_region->isWildcard();
@@ -433,6 +445,7 @@ void MyMesh::sendFloodReply(mesh::Packet* packet, unsigned long delay_millis, ui
 
 bool MyMesh::allowPacketForward(const mesh::Packet *packet) {
   if (_prefs.disable_fwd) return false;
+  if (isPathBlacklisted(packet)) return false;
   if (packet->isRouteFlood()
       && mesh::isFloodHopLimitExceeded(packet, _prefs.flood_max, _prefs.flood_max_unscoped, _prefs.flood_max_advert)) {
     return false;
@@ -946,6 +959,7 @@ void MyMesh::begin(FILESYSTEM *fs) {
   // load persisted prefs
   _cli.loadPrefs(_fs);
   acl.load(_fs, self_id);
+  blacklist.load(_fs);
   // TODO: key_store.begin();
   region_map.load(_fs);
 
@@ -1270,6 +1284,51 @@ void MyMesh::handleCommand(uint32_t sender_timestamp, char *command, char *reply
       Serial.printf("\n");
     }
     reply[0] = 0;
+  } else if (memcmp(command, "blacklist.add ", 14) == 0) {   // format:  blacklist.add {pubkey-hex}
+    const char* hex = &command[14];
+    uint8_t pubkey[PUB_KEY_SIZE];
+    if (mesh::Utils::fromHex(pubkey, PUB_KEY_SIZE, hex)) {
+      if (blacklist.add(pubkey, PUB_KEY_SIZE)) {
+        blacklist.save(_fs);
+        strcpy(reply, "OK");
+      } else {
+        strcpy(reply, "Err - blacklist full");
+      }
+    } else {
+      strcpy(reply, "Err - bad pubkey (need full pubkey hex)");
+    }
+  } else if (memcmp(command, "blacklist.remove ", 17) == 0) {   // format:  blacklist.remove {pubkey-hex} (can be partial prefix)
+    const char* hex = &command[17];
+    uint8_t pubkey[PUB_KEY_SIZE];
+    int hex_len = min((int)strlen(hex), PUB_KEY_SIZE * 2);
+    int pubkey_len = hex_len / 2;
+    if (pubkey_len > 0 && mesh::Utils::fromHex(pubkey, pubkey_len, hex)) {
+      if (blacklist.remove(pubkey, pubkey_len)) {
+        blacklist.save(_fs);
+        strcpy(reply, "OK");
+      } else {
+        strcpy(reply, "Err - not found");
+      }
+    } else {
+      strcpy(reply, "Err - bad pubkey");
+    }
+  } else if (memcmp(command, "blacklist.list", 14) == 0) {
+    int n = blacklist.getNumEntries();
+    if (n == 0) {
+      strcpy(reply, "(empty)");
+    } else {
+      int off = 0, shown = 0;
+      for (int i = 0; i < n && off + 13 <= 150; i++) {
+        if (off > 0) reply[off++] = ' ';
+        mesh::Utils::toHex(&reply[off], blacklist.getEntry(i), 6);  // 6-byte prefix, enough to identify/remove
+        off += 12;
+        shown++;
+      }
+      reply[off] = 0;
+      if (shown < n) {
+        sprintf(&reply[off], " (+%d more)", n - shown);
+      }
+    }
   } else if (memcmp(command, "discover.neighbors", 18) == 0) {
     const char* sub = command + 18;
     while (*sub == ' ') sub++;
